@@ -8,7 +8,7 @@
 const WORLD = 6000, GS = 150, GN = Math.ceil(WORLD / GS), TAU = Math.PI * 2;
 const C = {
   WORLD, START_MASS: 22, MAX_CELLS: 16, MIN_SPLIT: 36, MIN_EJECT: 32, EJECT_MASS: 13, EJECT_COST: 16,
-  VIRUS_MASS: 100, VIRUS_FEED: 7, EAT_RATIO: 1.25, FOOD_TARGET: 1500, VIRUS_TARGET: 24, FOOD_COLORS: 8, SKINS: 16
+  VIRUS_MASS: 100, VIRUS_FEED: 7, EAT_RATIO: 1.15, EAT_OVERLAP: 0.33, FOOD_TARGET: 1500, VIRUS_TARGET: 24, FOOD_COLORS: 8, SKINS: 16
 };
 const NAMES = ['小胖球','吃货本货','别吃我呀','佛系玩家','夜猫子','芝士球','大白','今天也要加油','旋风少年','柠檬精','一口一个','蛋黄派','摸鱼达人','汤圆','饭团','奶茶三分糖','快乐肥宅','无敌小可爱','路过的','南瓜头','咸鱼翻身','芒果布丁','不吃香菜','小笼包','北极熊','熬夜冠军','草莓味','猫猫拳','狗头保命','元气满满','Nomnom','Bubble','Pixel','Lucky','Mochi','Tofu','Boba','Pudding','打工人','追风','吞天','慢慢来','一只鹅','秋天的风','早睡早起','momo','嘟嘟','开心果','隔壁小王','小橘子','深海','阿飞'];
 
@@ -286,7 +286,7 @@ function createWorld(opt) {
         if (dx > R || dx < -R || dy > R || dy < -R) continue;
         const bg = a.mass >= b.mass ? a : b, sm = bg === a ? b : a;
         if (bg.mass < sm.mass * C.EAT_RATIO) continue;
-        if (Math.hypot(dx, dy) < bg.r - sm.r * .4) { consume(bg, sm); if (a.dead) break; }
+        if (Math.hypot(dx, dy) < bg.r - sm.r * C.EAT_OVERLAP) { consume(bg, sm); if (a.dead) break; }
       }
     }
   }
@@ -294,9 +294,8 @@ function createWorld(opt) {
     let bots = 0; for (const p of players) if (p.isBot) bots++;
     if (bots < botTarget) { const p = addPlayer(null, null, true); spawn(p, rand(20, 40)); }
     else if (bots > botTarget) {
-      let victim = null, vm = Infinity;
-      for (const p of players) { if (!p.isBot) continue; const m = p.alive ? massOf(p) : -1; if (m < vm) { vm = m; victim = p; } }
-      if (victim) removePlayer(victim);
+      // 只移除已经死亡的 AI，避免活着的 AI 突然消失
+      for (const p of players) { if (p.isBot && !p.alive) { removePlayer(p); break; } }
     }
   }
 
@@ -309,6 +308,8 @@ function createWorld(opt) {
     }
     for (const c of cells) if (!c.dead) moveCell(c, dt);
     for (const p of players) if (p.alive && p.cells.length > 1) siblings(p, dt);
+    // 自己的球互相挤压后可能被推出地图，这里再限制一次边界
+    for (const c of cells) { if (c.dead) continue; const m = c.r * .4; c.x = clamp(c.x, m, WORLD - m); c.y = clamp(c.y, m, WORLD - m); }
     const ke = Math.exp(-4 * dt);
     for (const e of ejects) { if (e.dead || (!e.vx && !e.vy)) continue; e.x += e.vx * dt; e.y += e.vy * dt; e.vx *= ke; e.vy *= ke; if (Math.abs(e.vx) + Math.abs(e.vy) < 4) e.vx = e.vy = 0; e.x = clamp(e.x, e.r, WORLD - e.r); e.y = clamp(e.y, e.r, WORLD - e.r); }
     const kv = Math.exp(-3.5 * dt);
