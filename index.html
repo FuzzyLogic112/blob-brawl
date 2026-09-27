@@ -75,6 +75,16 @@ kbd{font-family:inherit;font-size:11px;font-weight:800;background:#eef2ec;border
 .act.press{transform:translateY(3px)}
 #btnSplit.press{box-shadow:0 2px 0 var(--coral-deep)}
 #btnEject.press{box-shadow:0 2px 0 var(--teal-deep)}
+#btnBoost{width:66px;height:66px;right:calc(29px + env(safe-area-inset-right,0px));bottom:calc(136px + env(safe-area-inset-bottom,0px));background:#f5a623;font-size:15px;box-shadow:0 5px 0 #b8740a;overflow:hidden}
+#btnBoost::before{content:"";position:absolute;left:0;right:0;bottom:0;height:var(--e,100%);background:rgba(255,255,255,.28);transition:height .1s linear}
+#btnBoost span{position:relative}
+#btnBoost.press{box-shadow:0 2px 0 #b8740a}
+#btnBoost.empty{background:#c9b28a;box-shadow:0 5px 0 #9a8662}
+.energy{display:flex;align-items:center;gap:8px;margin-top:5px}
+.energy .lbl{font-size:11px;letter-spacing:.14em;color:var(--ink-2);font-weight:700;flex:none}
+.energy .bar{flex:1;min-width:64px;height:7px;border-radius:99px;background:#e6ebe3;overflow:hidden}
+.energy .bar i{display:block;height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#ffc53d,#f5a623)}
+.energy.low .bar i{background:var(--coral)}
 
 /* ---------- overlays ---------- */
 .overlay{position:fixed;inset:0;z-index:10;display:flex;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));overflow-y:auto;box-sizing:border-box}
@@ -164,9 +174,9 @@ body.touch #board{width:150px;padding:8px 10px}
 body.touch #boardList li{font-size:12px;grid-template-columns:18px minmax(0,1fr) auto}
 body.touch #stats{padding:7px 12px 8px;min-width:0}
 body.touch .stat-main b{font-size:22px}
-body.touch #minimap{right:auto;bottom:auto;left:calc(12px + env(safe-area-inset-left,0px));top:calc(78px + env(safe-area-inset-top,0px));width:92px;height:92px}
-body.touch.online #minimap{top:calc(98px + env(safe-area-inset-top,0px))}
-body.touch #feed{top:auto;bottom:calc(172px + env(safe-area-inset-bottom,0px))}
+body.touch #minimap{right:auto;bottom:auto;left:calc(12px + env(safe-area-inset-left,0px));top:calc(106px + env(safe-area-inset-top,0px));width:92px;height:92px}
+body.touch.online #minimap{top:calc(124px + env(safe-area-inset-top,0px))}
+body.touch #feed{top:auto;bottom:calc(224px + env(safe-area-inset-bottom,0px))}
 body.touch #keys{display:none}
 @media (prefers-reduced-motion:reduce){.logo span,.feed-item,.blob-loader{animation:none}}
 </style>
@@ -179,6 +189,7 @@ body.touch #keys{display:none}
     <div class="stat-main"><span class="lbl">质量</span><b id="sMass">0</b></div>
     <div class="stat-sub"><span id="sRank">排名 —</span><span id="sKills">击败 0</span></div>
     <div class="stat-net" id="sNet" hidden></div>
+    <div class="energy" id="energy"><span class="lbl">加速</span><div class="bar"><i id="energyFill"></i></div></div>
   </div>
   <div id="topbar">
     <div id="timer" class="panel" hidden>3:00</div>
@@ -187,11 +198,12 @@ body.touch #keys{display:none}
   <div id="feed" aria-live="polite"></div>
   <div id="board" class="panel"><p class="board-h">排行榜</p><ol id="boardList"></ol></div>
   <canvas id="minimap" width="150" height="150" aria-label="小地图"></canvas>
-  <div id="keys" class="panel only-desk"><span><kbd>鼠标</kbd> 移动</span><span><kbd>空格</kbd> 分身</span><span><kbd>W</kbd> 吐球</span><span><kbd>Esc</kbd> 暂停</span></div>
+  <div id="keys" class="panel only-desk"><span><kbd>鼠标</kbd> 移动</span><span><kbd>空格</kbd> 分身</span><span><kbd>W</kbd> 吐球</span><span><kbd>Shift</kbd> 加速</span><span><kbd>Esc</kbd> 暂停</span></div>
 </div>
 
 <div id="touch" hidden>
   <div id="joyBase"><div id="joyKnob"></div></div>
+  <button id="btnBoost" class="act" type="button"><span>加速</span></button>
   <button id="btnEject" class="act" type="button">吐球</button>
   <button id="btnSplit" class="act" type="button">分身</button>
 </div>
@@ -223,9 +235,9 @@ body.touch #keys{display:none}
       <button type="button" id="soundBtn" class="link-btn">音效：开</button>
     </div>
     <div class="howto">
-      <div class="row only-desk"><span><kbd>鼠标</kbd> 控制方向</span><span><kbd>空格</kbd> 分身冲刺</span><span><kbd>W</kbd> 吐出质量</span><span><kbd>Esc</kbd> 暂停</span></div>
-      <div class="row only-touch"><span>左手按住屏幕拖动控制方向</span><span>右下角按钮分身、吐球</span></div>
-      <div class="tip">质量比对方大 15% 才能吃掉它：对手名字是<b class="c-eat">绿色</b>的能吃，<b class="c-danger">红色</b>的能吃掉你。绿色刺球能藏身，但大球撞上会炸成碎块；往刺球里吐 7 次球能把它射出去。</div>
+      <div class="row only-desk"><span><kbd>鼠标</kbd> 控制方向</span><span><kbd>空格</kbd> 分身冲刺</span><span><kbd>W</kbd> 吐出质量</span><span><kbd>Shift</kbd> 或按住左键 加速</span><span><kbd>Esc</kbd> 暂停</span></div>
+      <div class="row only-touch"><span>左手按住屏幕拖动控制方向</span><span>右下角按钮分身、吐球、加速</span></div>
+      <div class="tip">质量比对方大 15% 才能吃掉它：对手名字是<b class="c-eat">绿色</b>的能吃，<b class="c-danger">红色</b>的能吃掉你。绿色刺球能藏身，但大球撞上会炸成碎块；往刺球里吐 7 次球能把它射出去。加速能量用完后要松开等它恢复。</div>
     </div>
   </div>
 </section>
@@ -396,6 +408,7 @@ const Sound={ac:null,on:store.get('sound',true),lastEat:0,lastEject:0,
   eject(){const n=performance.now();if(n-this.lastEject<80)return;this.lastEject=n;this.tone(480,.06,'square',.018,240);},
   gulp(){this.tone(220,.12,'sine',.12,520);this.tone(660,.14,'triangle',.06,1320,.06);},
   pop(){this.tone(900,.28,'sawtooth',.05,120);},
+  boost(){this.tone(180,.2,'sawtooth',.03,620);},
   death(){this.tone(440,.55,'triangle',.1,90);},
   end(){[523,659,784,1046].forEach((f,i)=>this.tone(f,.2,'triangle',.07,null,i*.1));}
 };
@@ -407,7 +420,7 @@ let parts=[],floaters=[];
 let state='menu',mode='online',timeLeft=TIMED_LEN;   // state: menu / connecting / playing / paused / dead / results / disconnected
 let touchMode=false;
 const cam={x:WORLD/2,y:WORLD/2,z:.6,focus:null,focusUntil:0};
-const input={mx:innerWidth/2,my:innerHeight/2,eject:false,joy:{active:false,id:null,ox:0,oy:0,dx:0,dy:0,mag:0}};
+const input={mx:innerWidth/2,my:innerHeight/2,eject:false,boost:false,joy:{active:false,id:null,ox:0,oy:0,dx:0,dy:0,mag:0}};
 const V={cells:[],foods:[],ejects:[],viruses:[]};let me=null;const myCells=[];
 
 function inView(x,y,r){const hw=W/2/cam.z+r,hh=H/2/cam.z+r;return Math.abs(x-cam.x)<hw&&Math.abs(y-cam.y)<hh;}
@@ -430,7 +443,7 @@ function makeLocalWorld(){
 /* ================= 联机 ================= */
 const Net={ws:null,token:0,active:false,alive:false,failed:false,myId:0,me:null,
   players:new Map(),cells:new Map(),cellsArr:[],foods:new Map(),foodsArr:[],ejects:new Map(),ejectsArr:[],viruses:new Map(),virusesArr:[],
-  lb:null,kills:0,lastMass:0,ping:0,gen:0,snapCam:false,inTimer:0,pingTimer:0,eatRatio:C.EAT_RATIO,
+  lb:null,kills:0,lastMass:0,ping:0,gen:0,snapCam:false,inTimer:0,pingTimer:0,eatRatio:C.EAT_RATIO,energy:null,
   send(o){const ws=this.ws;if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
 };
 let connectTimer=0;
@@ -509,7 +522,8 @@ function onNetMsg(m){
 }
 function onSnap(buf){
   const dv=new DataView(buf);let o=0;
-  if(dv.getUint8(o)!==1)return;o+=1;
+  const type=dv.getUint8(o);if(type!==1&&type!==2)return;o+=1;
+  if(type===2){const e=dv.getUint8(o);o+=1;Net.energy=e===255?null:e;}
   let n=dv.getUint16(o,true);o+=2;
   for(let i=0;i<n;i++){Net.foods.set(dv.getUint32(o,true),{x:dv.getUint16(o+4,true)/10,y:dv.getUint16(o+6,true)/10,ci:dv.getUint8(o+8),r:dv.getUint8(o+9)===1?5.5:7.5});o+=10;}
   let foodChanged=n>0;
@@ -519,10 +533,10 @@ function onSnap(buf){
   const gen=++Net.gen;
   n=dv.getUint16(o,true);o+=2;
   for(let i=0;i<n;i++){
-    const id=dv.getUint32(o,true),ow=dv.getUint32(o+4,true),x=dv.getUint16(o+8,true)/10,y=dv.getUint16(o+10,true)/10,r=dv.getUint16(o+12,true)/10;o+=14;
+    const id=dv.getUint32(o,true),ow=dv.getUint32(o+4,true),x=dv.getUint16(o+8,true)/10,y=dv.getUint16(o+10,true)/10,rw=dv.getUint16(o+12,true),r=(rw&0x7fff)/10,bst=rw>>15;o+=14;
     let c=Net.cells.get(id);
     if(!c){c={id,x,y,r,rd:r,tx:x,ty:y,mass:S.massFromR(r),seed:Math.random()*TAU,owner:null,gen};Net.cells.set(id,c);}
-    c.tx=x;c.ty=y;c.r=r;c.mass=S.massFromR(r);c.gen=gen;c.owner=netPlayer(ow);
+    c.tx=x;c.ty=y;c.r=r;c.mass=S.massFromR(r);c.gen=gen;c.owner=netPlayer(ow);c.boost=bst;
   }
   for(const [id,c] of Net.cells)if(c.gen!==gen)Net.cells.delete(id);
   Net.cellsArr=[...Net.cells.values()];
@@ -559,6 +573,7 @@ function sendInput(){
     const t=state==='playing'?computeTarget(myCells):null,tgt=t||centerOfCells(myCells);
     if(tgt){msg.x=Math.round(tgt.x);msg.y=Math.round(tgt.y);}
     msg.e=state==='playing'&&input.eject?1:0;
+    msg.b=state==='playing'&&input.boost?1:0;
   }
   Net.send(msg);
 }
@@ -596,8 +611,8 @@ function computeTarget(cells){
 }
 function localInput(){
   if(!human||!human.alive)return;
-  if(state==='playing'){const t=computeTarget(human.cells);if(t){human.tx=t.x;human.ty=t.y;if(t.dx||t.dy){human.lastDx=t.dx;human.lastDy=t.dy;}}human.ejecting=input.eject;}
-  else{const c=world.centerOf(human);if(c){human.tx=c.x;human.ty=c.y;}human.ejecting=false;}
+  if(state==='playing'){const t=computeTarget(human.cells);if(t){human.tx=t.x;human.ty=t.y;if(t.dx||t.dy){human.lastDx=t.dx;human.lastDy=t.dy;}}human.ejecting=input.eject;human.boosting=input.boost;}
+  else{const c=world.centerOf(human);if(c){human.tx=c.x;human.ty=c.y;}human.ejecting=false;human.boosting=false;}
 }
 const onlineView=()=>mode==='online'&&Net.active;
 const meAlive=()=>onlineView()?Net.alive:!!(human&&human.alive);
@@ -605,6 +620,12 @@ function doSplit(){
   if(state!=='playing'||!meAlive())return;
   if(onlineView()){sendInput();Net.send({t:'sp'});Sound.split();}
   else if(human)world.split(human);
+}
+function myEnergy(){if(onlineView())return Net.energy==null?C.ENERGY_MAX:Net.energy;return human?human.energy:C.ENERGY_MAX;}
+function setBoost(on){
+  if(input.boost===on)return;input.boost=on;
+  if(on&&state==='playing'&&meAlive()&&myEnergy()>=C.BOOST_MIN_START)Sound.boost();
+  if(onlineView()&&state==='playing')sendInput();
 }
 function setEject(on){
   if(input.eject===on)return;input.eject=on;
@@ -674,6 +695,18 @@ function drawCell(c,z){
     ctx.restore();
   }
 }
+let frameDt=.016;
+function trackVel(c){ // 用画面上的位移估算速度，给加速残影用
+  if(c.px!==undefined){let vx=(c.x-c.px)/frameDt,vy=(c.y-c.py)/frameDt;if(vx*vx+vy*vy>9e6){vx=0;vy=0;}c.vxs=(c.vxs||0)*.7+vx*.3;c.vys=(c.vys||0)*.7+vy*.3;}
+  c.px=c.x;c.py=c.y;
+}
+function drawGhost(c){ // 加速残影：沿运动反方向拖出 3 个渐淡的影子
+  const sp=Math.hypot(c.vxs||0,c.vys||0);if(sp<30)return;
+  const ux=c.vxs/sp,uy=c.vys/sp,r=c.rd;
+  ctx.fillStyle=skinOf(c.owner.skin).base;
+  for(let i=3;i>=1;i--){const off=r*(.2+i*.28);ctx.globalAlpha=.3-(i-1)*.09;ctx.beginPath();ctx.arc(c.x-ux*off,c.y-uy*off,r*(1-i*.12),0,TAU);ctx.fill();}
+  ctx.globalAlpha=1;
+}
 function drawVirus(v){
   const n=26,r=v.rd;ctx.beginPath();
   for(let i=0;i<n*2;i++){const a=i/(n*2)*TAU+v.rot,rr=i%2?r*.9:r*1.05,x=v.x+Math.cos(a)*rr,y=v.y+Math.sin(a)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
@@ -703,7 +736,12 @@ function render(){
   drawList.sort((a,b)=>a.rd-b.rd);
   relBig=0;relSmall=0;if(meAlive())for(const c of myCells){if(c.mass>relBig)relBig=c.mass;if(!relSmall||c.mass<relSmall)relSmall=c.mass;}
   ctx.font='900 100px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
-  for(const o of drawList){if(o.virus)drawVirus(o);else drawCell(o,z);}
+  for(const o of drawList){
+    if(o.virus){drawVirus(o);continue;}
+    trackVel(o);
+    if(onlineView()?o.boost:o.owner.boostActive)drawGhost(o);
+    drawCell(o,z);
+  }
   for(const p of parts){ctx.globalAlpha=Math.max(0,p.life/.5);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r*(.4+.6*p.life/.5),0,TAU);ctx.fill();}
   ctx.globalAlpha=1;
   for(const f of floaters){const s=.24/z;ctx.save();ctx.translate(f.x,f.y);ctx.scale(s,s);ctx.globalAlpha=Math.min(1,f.life*1.6);ctx.lineWidth=12;ctx.strokeStyle='#fff';ctx.fillStyle='#ff5a5f';ctx.strokeText(f.t,0,0);ctx.fillText(f.t,0,0);ctx.restore();}
@@ -745,6 +783,13 @@ function refreshHud(){
   if(myRank>N)html+=boardRow(myRank,me,myMass,'me sep');
   $('boardList').innerHTML=html;
   if(mode==='timed'){$('timer').textContent=fmtTime(Math.ceil(timeLeft));$('timer').classList.toggle('low',timeLeft<=30);}
+}
+let lastEnergyShown=-1;
+function updateEnergyHud(){
+  if(state==='menu'||state==='connecting')return;
+  const e=Math.round(myEnergy());if(e===lastEnergyShown)return;lastEnergyShown=e;
+  $('energyFill').style.width=e+'%';$('energy').classList.toggle('low',e<C.BOOST_MIN_START);
+  const b=$('btnBoost');b.style.setProperty('--e',e+'%');b.classList.toggle('empty',e<C.BOOST_MIN_START);
 }
 function feed(text,kind){const box=$('feed'),el=document.createElement('div');el.className='feed-item '+(kind||'');el.textContent=text;box.prepend(el);while(box.children.length>3)box.lastChild.remove();setTimeout(()=>el.remove(),3000);}
 function syncUI(){
@@ -831,7 +876,7 @@ function placeJoy(x,y){
   joyBase.classList.add('on');joyBase.style.left=x+'px';joyBase.style.top=y+'px';
 }
 canvas.addEventListener('pointerdown',e=>{
-  if(e.pointerType==='mouse')return;
+  if(e.pointerType==='mouse'){if(e.button===0&&state==='playing')setBoost(true);return;}
   setTouchMode(true);e.preventDefault();
   if(state!=='playing')return;
   const j=input.joy;if(j.active)return;
@@ -845,6 +890,7 @@ canvas.addEventListener('pointermove',e=>{
   const dd=Math.hypot(dx,dy);j.mag=Math.min(1,dd/R);if(dd>0){j.dx=dx/dd;j.dy=dy/dd;}
   joyKnob.style.transform='translate('+dx+'px,'+dy+'px)';
 });
+window.addEventListener('pointerup',e=>{if(e.pointerType==='mouse'&&e.button===0)setBoost(false);});
 function endJoy(e){const j=input.joy;if(j.active&&e.pointerId===j.id){j.active=false;j.mag=0;placeJoy(null);}}
 canvas.addEventListener('pointerup',endJoy);canvas.addEventListener('pointercancel',endJoy);
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
@@ -856,17 +902,19 @@ function holdBtn(el,down,up){
 }
 holdBtn($('btnSplit'),doSplit);
 holdBtn($('btnEject'),()=>setEject(true),()=>setEject(false));
+holdBtn($('btnBoost'),()=>setBoost(true),()=>setBoost(false));
 window.addEventListener('keydown',e=>{
   if(e.target&&e.target.tagName==='INPUT'){if(e.key==='Enter')$('startBtn').click();return;}
   if(state==='playing'&&meAlive()){
     if(e.code==='Space'){e.preventDefault();if(!e.repeat)doSplit();}
     else if(e.code==='KeyW')setEject(true);
+    else if(e.code==='ShiftLeft'||e.code==='ShiftRight')setBoost(true);
     else if(e.code==='Escape'||e.code==='KeyP')pause();
   }else if(state==='paused'&&(e.code==='Escape'||e.code==='KeyP'))resume();
   else if(state==='menu'&&e.key==='Enter'&&e.target===document.body)$('startBtn').click();
 });
-window.addEventListener('keyup',e=>{if(e.code==='KeyW')setEject(false);});
-window.addEventListener('blur',()=>setEject(false));
+window.addEventListener('keyup',e=>{if(e.code==='KeyW')setEject(false);if(e.code==='ShiftLeft'||e.code==='ShiftRight')setBoost(false);});
+window.addEventListener('blur',()=>{setEject(false);setBoost(false);});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode!=='online')pause();});
 
 /* ================= 菜单 ================= */
@@ -934,14 +982,14 @@ function loop(now){
     for(let i=0;i<steps;i++){localInput();world.step(dt/steps);}
     if(mode==='timed'&&human&&(state==='playing'||state==='dead')){timeLeft-=dt;if(timeLeft<=0){timeLeft=0;endTimed();}}
   }
-  tickFx(dt);pickView();updateCam(dt);render();frame++;
+  tickFx(dt);pickView();updateCam(dt);frameDt=dt;render();frame++;updateEnergyHud();
   if(state!=='menu'&&state!=='connecting'){hudT-=dt;if(hudT<=0){refreshHud();hudT=.25;}if(frame%3===0)drawMini();}
   requestAnimationFrame(loop);
 }
 if(window.matchMedia&&matchMedia('(pointer: coarse)').matches){touchMode=true;document.body.classList.add('touch');}
 world=makeLocalWorld();
 resize();buildMenu();syncUI();refreshNetLine();
-window.__game={get state(){return state;},get mode(){return mode;},get human(){return human;},get world(){return world;},Net,doSplit,setEject,myCells,nameColor,setTimeLeft(v){timeLeft=v;}};
+window.__game={get state(){return state;},get mode(){return mode;},get human(){return human;},get world(){return world;},Net,doSplit,setEject,setBoost,myEnergy,myCells,nameColor,setTimeLeft(v){timeLeft=v;}};
 requestAnimationFrame(loop);
 })();
 </script>
