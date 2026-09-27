@@ -179,7 +179,7 @@ wss.on('connection', (ws, req) => {
         world.spawn(np, S.C.START_MASS); np.maxMass = S.C.START_MASS; np.bestRank = 99;
         const c = np.cells[0]; cl.cx = c.x; cl.cy = c.y;
         const f = []; for (const fd of world.foods) if (!fd.dead) f.push(fd.id, Math.round(fd.x * 10), Math.round(fd.y * 10), fd.ci, fd.mass);
-        sendJSON(cl, { t: 'w', id: np.id, world: WORLD, f, pl: world.players.map(playerRow) });
+        sendJSON(cl, { t: 'w', id: np.id, world: WORLD, f, pl: world.players.map(playerRow), r: S.C.EAT_RATIO, v: VERSION });
         updateBots();
         break;
       }
