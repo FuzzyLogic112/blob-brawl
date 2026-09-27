@@ -430,7 +430,7 @@ function makeLocalWorld(){
 /* ================= 联机 ================= */
 const Net={ws:null,token:0,active:false,alive:false,failed:false,myId:0,me:null,
   players:new Map(),cells:new Map(),cellsArr:[],foods:new Map(),foodsArr:[],ejects:new Map(),ejectsArr:[],viruses:new Map(),virusesArr:[],
-  lb:null,kills:0,lastMass:0,ping:0,gen:0,snapCam:false,inTimer:0,pingTimer:0,
+  lb:null,kills:0,lastMass:0,ping:0,gen:0,snapCam:false,inTimer:0,pingTimer:0,eatRatio:C.EAT_RATIO,
   send(o){const ws=this.ws;if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
 };
 let connectTimer=0;
@@ -492,7 +492,7 @@ function openSocket(token){
 function onNetMsg(m){
   switch(m.t){
     case 'w':{
-      resetNet();Net.myId=m.id;for(const r of m.pl)updPlayer(r);
+      resetNet();Net.myId=m.id;Net.eatRatio=m.r||1.25;for(const r of m.pl)updPlayer(r);
       const f=m.f;for(let i=0;i<f.length;i+=5)Net.foods.set(f[i],{x:f[i+1]/10,y:f[i+2]/10,ci:f[i+3],r:f[i+4]===1?5.5:7.5});
       Net.foodsArr=[...Net.foods.values()];Net.me=netPlayer(m.id);Net.active=true;Net.alive=true;Net.snapCam=true;
       clearInterval(connectTimer);state='playing';syncUI();startInputLoop();refreshHud();
@@ -647,8 +647,9 @@ const EDIBLE_COLOR='#9dffc6',DANGER_COLOR='#ffb2b6';
 const RING={'#9dffc6':'rgba(22,193,114,.85)','#ffb2b6':'rgba(255,59,71,.85)'};
 function nameColor(m){
   if(!relBig)return'#fff';
-  if(relBig>=m*C.EAT_RATIO)return EDIBLE_COLOR;     // 我最大的球能吃掉它
-  if(m>=relSmall*C.EAT_RATIO)return DANGER_COLOR;   // 它能吃掉我至少一个球
+  const k=onlineView()?Net.eatRatio:C.EAT_RATIO;   // 联机时以服务器的规则为准
+  if(relBig>=m*k)return EDIBLE_COLOR;     // 我最大的球能吃掉它
+  if(m>=relSmall*k)return DANGER_COLOR;   // 它能吃掉我至少一个球
   return'#fff';
 }
 function drawCell(c,z){
