@@ -76,14 +76,17 @@ function snapshotFor(cl, foodPart) {
   for (const e of world.ejects) { if (e.dead) continue; if (Math.abs(e.x - cx) < hw && Math.abs(e.y - cy) < hh) ve.push(e); }
   for (const v of world.viruses) { if (v.dead) continue; if (Math.abs(v.x - cx) < hw + v.r && Math.abs(v.y - cy) < hh + v.r) vv.push(v); }
   const nc = Math.min(vc.length, 65535), ne = Math.min(ve.length, 65535), nv = Math.min(vv.length, 65535);
-  const buf = Buffer.allocUnsafe(1 + foodPart.length + 2 + nc * 14 + 2 + ne * 9 + 2 + nv * 11);
-  let o = buf.writeUInt8(1, 0);
+  // 快照格式 2：类型(1) + 自己的加速能量(1) + 豆子增减 + 球 + 吐出的球 + 刺球
+  const buf = Buffer.allocUnsafe(2 + foodPart.length + 2 + nc * 14 + 2 + ne * 9 + 2 + nv * 11);
+  let o = buf.writeUInt8(2, 0);
+  o = buf.writeUInt8(p && p.alive ? Math.max(0, Math.min(100, Math.round(p.energy))) : 255, o);
   o += foodPart.copy(buf, o);
   o = buf.writeUInt16LE(nc, o);
   for (let i = 0; i < nc; i++) {
     const c = vc[i];
     o = buf.writeUInt32LE(c.id, o); o = buf.writeUInt32LE(c.owner.id, o);
-    o = buf.writeUInt16LE(u16(c.x * 10), o); o = buf.writeUInt16LE(u16(c.y * 10), o); o = buf.writeUInt16LE(u16(c.r * 10), o);
+    // 半径的最高位用来标记这个球的主人正在加速
+    o = buf.writeUInt16LE(u16(c.x * 10), o); o = buf.writeUInt16LE(u16(c.y * 10), o); o = buf.writeUInt16LE((Math.min(32767, Math.round(c.r * 10)) | (c.owner.boostActive ? 0x8000 : 0)), o);
   }
   o = buf.writeUInt16LE(ne, o);
   for (let i = 0; i < ne; i++) {
@@ -193,6 +196,7 @@ wss.on('connection', (ws, req) => {
         const c = world.centerOf(p);
         if (c) { const dx = p.tx - c.x, dy = p.ty - c.y, d = Math.hypot(dx, dy); if (d > 6) { p.lastDx = dx / d; p.lastDy = dy / d; } }
         const e = !!m.e; if (e !== p.ejecting) { p.ejecting = e; p.ejectT = 0; }
+        p.boosting = !!m.b;
         break;
       }
       case 'sp': if (p && p.alive) world.split(p); break;

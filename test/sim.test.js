@@ -152,6 +152,56 @@ test('自己的球挤在地图边上也不会被推出地图', () => {
   for (const c of a.cells) assert.ok(c.x >= 0 && c.x <= C.WORLD, '球被推出地图 x=' + c.x.toFixed(1));
 });
 
+console.log('加速');
+function runner(w, mass, boost, secs) {
+  const p = w.addPlayer('跑', 0, false); w.spawn(p, mass);
+  const c = p.cells[0]; c.x = 800; c.y = 3000; p.tx = 5800; p.ty = 3000; p.boosting = boost;
+  const x0 = c.x, log = [];
+  for (let i = 0; i < 40 * secs; i++) { w.step(1 / 40); log.push({ e: p.energy, on: p.boostActive }); }
+  return { p, dist: p.cells[0].x - x0, log };
+}
+test('加速时速度约为 1.65 倍', () => {
+  const w = arena();
+  const n = runner(w, 60, false, 1), b = runner(w, 60, true, 1);
+  const ratio = b.dist / n.dist;
+  assert.ok(ratio > 1.55 && ratio < 1.75, '速度倍率 ' + ratio.toFixed(2));
+});
+test('满能量约能冲 2.2 秒，用完后按着也不会再加速', () => {
+  const w = arena();
+  const { log } = runner(w, 60, true, 6);
+  const onFrames = log.filter(x => x.on).length / 40;
+  assert.ok(onFrames > 2.0 && onFrames < 2.4, '加速持续了 ' + onFrames.toFixed(2) + ' 秒');
+  const firstOff = log.findIndex(x => !x.on);
+  assert.ok(log.slice(firstOff).every(x => !x.on), '能量耗尽后按住不放又开始加速了');
+});
+test('停止加速 1 秒后才开始恢复，约 7 秒回满；松开再按能继续加速', () => {
+  const w = arena();
+  const r = runner(w, 60, true, 2.3);           // 刚好把能量用完
+  const p = r.p;
+  assert.ok(p.energy < 1 && !p.boostActive);
+  p.boosting = false;
+  for (let i = 0; i < 40 * 0.6; i++) w.step(1 / 40);
+  assert.ok(p.energy < 1, '停止加速后 1 秒内不应恢复，实际 ' + p.energy.toFixed(1));
+  for (let i = 0; i < 40 * 8; i++) w.step(1 / 40);
+  assert.equal(Math.round(p.energy), C.ENERGY_MAX);
+  p.boosting = true; w.step(1 / 40);
+  assert.equal(p.boostActive, true);
+});
+test('复活时能量是满的', () => {
+  const w = arena();
+  const r = runner(w, 60, true, 1);
+  assert.ok(r.p.energy < C.ENERGY_MAX);
+  w.spawn(r.p, 30);
+  assert.equal(r.p.energy, C.ENERGY_MAX);
+  assert.equal(r.p.boostActive, false);
+});
+test('AI 会在逃跑或追击时使用加速', () => {
+  const w = S.createWorld({ bots: 26 });
+  let frames = 0;
+  for (let i = 0; i < 40 * 60; i++) { w.step(1 / 40); for (const p of w.players) if (p.boostActive) frames++; }
+  assert.ok(frames > 100, 'AI 几乎不加速：' + frames);
+});
+
 console.log('AI 数量调整');
 test('人多时 AI 只在死亡后移除，不会凭空消失；人少时逐个补回', () => {
   const died = new Set(); const removedAlive = [];
@@ -179,6 +229,7 @@ test('坐标、质量、编号、归属始终合法', () => {
         if (i % 20 === 0) { h.tx = Math.random() * C.WORLD; h.ty = Math.random() * C.WORLD; }
         if (Math.random() < 0.004) w.split(h);
         h.ejecting = Math.random() < 0.05;
+        if (i % 30 === 0) h.boosting = Math.random() < 0.4;
       }
       const t0 = process.hrtime.bigint();
       w.step(1 / 40);
@@ -199,6 +250,7 @@ test('坐标、质量、编号、归属始终合法', () => {
         assert.ok(p.cells.length <= C.MAX_CELLS, '超过 16 块');
         for (const c of p.cells) assert.ok(ids.has(c.id), '玩家列表里有不在场的球');
         assert.equal(p.alive, p.cells.length > 0, '存活状态与球数不一致');
+        assert.ok(p.energy >= 0 && p.energy <= C.ENERGY_MAX, '能量越界 ' + p.energy);
       }
       assert.ok(w.foods.length >= C.FOOD_TARGET - 60 && w.foods.length <= C.FOOD_TARGET, '豆子数量异常 ' + w.foods.length);
       assert.ok(w.viruses.length <= 80, '刺球数量异常 ' + w.viruses.length);

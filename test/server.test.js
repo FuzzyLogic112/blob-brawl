@@ -23,20 +23,23 @@ async function test(name, fn) {
 /* ---------- 快照解码（与前端一致） ---------- */
 function decodeSnap(buf) {
   let o = 0;
-  assert.equal(buf.readUInt8(o), 1, '快照类型错误'); o += 1;
+  const type = buf.readUInt8(o); o += 1;
+  assert.ok(type === 1 || type === 2, '快照类型错误 ' + type);
+  let energy = null;
+  if (type === 2) { energy = buf.readUInt8(o); o += 1; }
   const adds = [], dels = [], cells = [], ejects = [], viruses = [];
   let n = buf.readUInt16LE(o); o += 2;
   for (let i = 0; i < n; i++) { adds.push({ id: buf.readUInt32LE(o), x: buf.readUInt16LE(o + 4) / 10, y: buf.readUInt16LE(o + 6) / 10, ci: buf.readUInt8(o + 8), m: buf.readUInt8(o + 9) }); o += 10; }
   n = buf.readUInt16LE(o); o += 2;
   for (let i = 0; i < n; i++) { dels.push(buf.readUInt32LE(o)); o += 4; }
   n = buf.readUInt16LE(o); o += 2;
-  for (let i = 0; i < n; i++) { cells.push({ id: buf.readUInt32LE(o), owner: buf.readUInt32LE(o + 4), x: buf.readUInt16LE(o + 8) / 10, y: buf.readUInt16LE(o + 10) / 10, r: buf.readUInt16LE(o + 12) / 10 }); o += 14; }
+  for (let i = 0; i < n; i++) { const rw = buf.readUInt16LE(o + 12); cells.push({ id: buf.readUInt32LE(o), owner: buf.readUInt32LE(o + 4), x: buf.readUInt16LE(o + 8) / 10, y: buf.readUInt16LE(o + 10) / 10, r: (rw & 0x7fff) / 10, boost: rw >> 15 }); o += 14; }
   n = buf.readUInt16LE(o); o += 2;
   for (let i = 0; i < n; i++) { ejects.push({ id: buf.readUInt32LE(o), x: buf.readUInt16LE(o + 4) / 10, y: buf.readUInt16LE(o + 6) / 10, skin: buf.readUInt8(o + 8) }); o += 9; }
   n = buf.readUInt16LE(o); o += 2;
   for (let i = 0; i < n; i++) { viruses.push({ id: buf.readUInt32LE(o), x: buf.readUInt16LE(o + 4) / 10, y: buf.readUInt16LE(o + 6) / 10, r: buf.readUInt16LE(o + 8) / 10, feed: buf.readUInt8(o + 10) }); o += 11; }
   assert.equal(o, buf.length, '快照长度对不上');
-  return { adds, dels, cells, ejects, viruses };
+  return { type, energy, adds, dels, cells, ejects, viruses };
 }
 
 /* ---------- 模拟玩家 ---------- */
@@ -70,6 +73,8 @@ class Client {
         if (!this.players.has(c.owner)) this.missingOwner++;
       }
       this.myCells = s.cells.filter(c => c.owner === this.id);
+      this.energy = s.energy; this.snapType = s.type;
+      if (this.myCells.some(c => c.boost)) this.sawBoost = true;
     } catch (e) { this.errors.push('解码失败: ' + e.message); }
   }
   send(o) { if (this.ws.readyState === 1) this.ws.send(typeof o === 'string' ? o : JSON.stringify(o)); }
@@ -168,6 +173,26 @@ const status = async () => (await fetch(BASE + '/status')).json();
     await sleep(300);
     assert.equal(b.alive, true);
     assert.equal(b.myCells.length, 1);
+  });
+
+  console.log('加速');
+  await test('按住加速后能量下降、自己的球带加速标记；松开后停止并恢复', async () => {
+    const c = cs[3];
+    await sleep(200);
+    assert.equal(c.snapType, 2, '应使用新快照格式');
+    assert.equal(c.energy, 100);
+    const ctr = c.center() || { x: 3000, y: 3000 };
+    c.sawBoost = false;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 1000) { c.send({ t: 'in', x: Math.round(ctr.x + 2000), y: Math.round(ctr.y), vw: 900, vh: 600, b: 1 }); await sleep(50); }
+    assert.ok(c.energy < 70 && c.energy > 30, '按住 1 秒后能量应在 55 左右，实际 ' + c.energy);
+    assert.ok(c.sawBoost, '快照里应能看到加速标记');
+    c.send({ t: 'in', x: Math.round(ctr.x), y: Math.round(ctr.y), vw: 900, vh: 600, b: 0 });
+    await sleep(300);
+    const e1 = c.energy;
+    assert.ok(!c.myCells.some(x => x.boost), '松开后不应再有加速标记');
+    await sleep(1800);
+    assert.ok(c.energy > e1 + 5, '松开 1 秒后应开始恢复：' + e1 + ' → ' + c.energy);
   });
 
   console.log('连接限制与异常输入');

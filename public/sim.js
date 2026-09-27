@@ -8,7 +8,9 @@
 const WORLD = 6000, GS = 150, GN = Math.ceil(WORLD / GS), TAU = Math.PI * 2;
 const C = {
   WORLD, START_MASS: 22, MAX_CELLS: 16, MIN_SPLIT: 36, MIN_EJECT: 32, EJECT_MASS: 13, EJECT_COST: 16,
-  VIRUS_MASS: 100, VIRUS_FEED: 7, EAT_RATIO: 1.15, EAT_OVERLAP: 0.33, FOOD_TARGET: 1500, VIRUS_TARGET: 24, FOOD_COLORS: 8, SKINS: 16
+  VIRUS_MASS: 100, VIRUS_FEED: 7, EAT_RATIO: 1.15, EAT_OVERLAP: 0.33, FOOD_TARGET: 1500, VIRUS_TARGET: 24, FOOD_COLORS: 8, SKINS: 16,
+  // 加速：按住时速度 ×1.65，满能量约能冲 2.2 秒；松开 1 秒后开始恢复，约 7 秒回满
+  BOOST_MUL: 1.65, ENERGY_MAX: 100, BOOST_DRAIN: 45, BOOST_REGEN: 14, BOOST_REGEN_DELAY: 1, BOOST_MIN_START: 15
 };
 const NAMES = ['小胖球','吃货本货','别吃我呀','佛系玩家','夜猫子','芝士球','大白','今天也要加油','旋风少年','柠檬精','一口一个','蛋黄派','摸鱼达人','汤圆','饭团','奶茶三分糖','快乐肥宅','无敌小可爱','路过的','南瓜头','咸鱼翻身','芒果布丁','不吃香菜','小笼包','北极熊','熬夜冠军','草莓味','猫猫拳','狗头保命','元气满满','Nomnom','Bubble','Pixel','Lucky','Mochi','Tofu','Boba','Pudding','打工人','追风','吞天','慢慢来','一只鹅','秋天的风','早睡早起','momo','嘟嘟','开心果','隔壁小王','小橘子','深海','阿飞'];
 
@@ -53,7 +55,8 @@ function createWorld(opt) {
       id: pidSeq++, name: name == null ? freshName() : name, skin: skin == null ? (Math.random() * C.SKINS) | 0 : skin, isBot: !!isBot,
       cells: [], tx: 0, ty: 0, alive: false, kills: 0, maxMass: 0, bestRank: 99, bornAt: 0, deathAt: 0, respawnAt: 0, thinkAt: 0,
       aggr: rand(.6, 1.5), caution: rand(.7, 1.3), speedMul: isBot ? rand(.93, 1) : 1, splitCd: 0, ejecting: false, ejectT: 0,
-      wx: 0, wy: 0, wanderUntil: 0, lastDx: 1, lastDy: 0, killer: null
+      wx: 0, wy: 0, wanderUntil: 0, lastDx: 1, lastDy: 0, killer: null,
+      boosting: false, boostActive: false, boostLock: false, boostUntil: 0, energy: C.ENERGY_MAX, regenWait: 0
     };
     players.push(p); emit('playerAdded', p); return p;
   }
@@ -81,6 +84,7 @@ function createWorld(opt) {
     for (const c of p.cells) c.dead = true;
     const pos = safeSpot(mass), c = makeCell(p, pos.x, pos.y, mass);
     p.cells = [c]; cells.push(c); p.alive = true; p.bornAt = T; p.tx = pos.x; p.ty = pos.y; p.killer = null; p.ejecting = false;
+    p.energy = C.ENERGY_MAX; p.boosting = false; p.boostActive = false; p.boostLock = false; p.regenWait = 0;
     if (mass > p.maxMass) p.maxMass = mass;
     return c;
   }
@@ -183,10 +187,15 @@ function createWorld(opt) {
       for (const v of viruses) { const dx = v.x - mx, dy = v.y - my, d = Math.hypot(dx, dy) || 1, gap = d - big.r - v.r; if (gap < 90) { const w = 1 - Math.max(0, gap) / 90; vx -= dx / d * w; vy -= dy / d * w; } }
     }
     let tx, ty;
-    if (danger > .14) { const l = Math.hypot(fx, fy) || 1; tx = mx + fx / l * 700; ty = my + fy / l * 700; }
+    if (danger > .14) {
+      const l = Math.hypot(fx, fy) || 1; tx = mx + fx / l * 700; ty = my + fy / l * 700;
+      if (danger > .35 && p.energy > 20) p.boostUntil = T + .5;   // 被追得紧就加速逃
+    }
     else if (prey && preyScore > .12) {
       tx = prey.x; ty = prey.y;
       const d = Math.hypot(prey.x - big.x, prey.y - big.y), reach = 230 + rad(big.mass / 2) * 1.6;
+      // 猎物就在眼前时，有一定概率加速追上去
+      if (T > p.boostUntil && p.energy > 45 && d - prey.r - big.r < 220 && Math.random() < .35 * p.aggr) p.boostUntil = T + .6 + Math.random() * .8;
       if (p.cells.length <= 3 && T > p.splitCd && big.mass / 2 > prey.mass * C.EAT_RATIO * 1.08 && d - prey.r < reach * .9 && danger < .05 && Math.random() < .45 * p.aggr) {
         p.tx = tx; p.ty = ty; split(p); p.splitCd = T + 4 + Math.random() * 5;
       }
@@ -201,12 +210,13 @@ function createWorld(opt) {
     }
     tx += vx * 260; ty += vy * 260;
     p.tx = clamp(tx, 0, WORLD); p.ty = clamp(ty, 0, WORLD);
+    p.boosting = T < p.boostUntil;
   }
 
   /* ---------- 物理 ---------- */
   function moveCell(c, dt) {
     const p = c.owner, dx = p.tx - c.x, dy = p.ty - c.y, d = Math.hypot(dx, dy);
-    if (d > 1) { const s = speedFor(c.r) * Math.min(1, d / (c.r * .5 + 35)) * p.speedMul; c.x += dx / d * s * dt; c.y += dy / d * s * dt; }
+    if (d > 1) { const s = speedFor(c.r) * Math.min(1, d / (c.r * .5 + 35)) * p.speedMul * (p.boostActive ? C.BOOST_MUL : 1); c.x += dx / d * s * dt; c.y += dy / d * s * dt; }
     if (c.bx || c.by) { c.x += c.bx * dt; c.y += c.by * dt; const k = Math.exp(-5.5 * dt); c.bx *= k; c.by *= k; if (Math.abs(c.bx) + Math.abs(c.by) < 5) c.bx = c.by = 0; }
     const m = c.r * .4; c.x = clamp(c.x, m, WORLD - m); c.y = clamp(c.y, m, WORLD - m);
   }
@@ -299,12 +309,28 @@ function createWorld(opt) {
     }
   }
 
+  /* 加速能量：按住就耗能量；耗光后要松开再按才能重新加速 */
+  function updateBoost(p, dt) {
+    if (!p.boosting) p.boostLock = false;
+    const can = p.boosting && !p.boostLock && (p.boostActive ? p.energy > 0 : p.energy >= C.BOOST_MIN_START);
+    if (can) {
+      p.boostActive = true; p.regenWait = C.BOOST_REGEN_DELAY;
+      p.energy = Math.max(0, p.energy - C.BOOST_DRAIN * dt);
+      if (p.energy <= 0) { p.boostActive = false; p.boostLock = true; }
+    } else {
+      p.boostActive = false;
+      if (p.regenWait > 0) p.regenWait -= dt;
+      else p.energy = Math.min(C.ENERGY_MAX, p.energy + C.BOOST_REGEN * dt);
+    }
+  }
+
   function step(dt) {
     T += dt;
     for (const p of players) {
       if (!p.alive) { if (p.isBot && T >= p.respawnAt) respawnBot(p); continue; }
       if (p.isBot && T >= p.thinkAt) think(p);
       if (p.ejecting) { p.ejectT -= dt; if (p.ejectT <= 0) { eject(p); p.ejectT = .085; } }
+      updateBoost(p, dt);
     }
     for (const c of cells) if (!c.dead) moveCell(c, dt);
     for (const p of players) if (p.alive && p.cells.length > 1) siblings(p, dt);
