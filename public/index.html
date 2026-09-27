@@ -289,7 +289,11 @@ const mini=$('minimap'),mctx=mini.getContext('2d');
 const FONT='"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Noto Sans SC","Hiragino Sans GB",system-ui,-apple-system,sans-serif';
 const FOOD_COLORS=['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7','#9775fa','#f783ac'];
 const TIMED_LEN=180;
-const DEFAULT_SERVER='wss://tuntun-brawl.onrender.com/ws';
+// 从 GitHub Pages 打开时按顺序尝试：先连国内服务器，连不上再用 Render 备用服务器
+const SERVER_LIST=[
+  {url:'wss://game.xwj0.cn/ws',label:'国内服务器'},
+  {url:'wss://tuntun-brawl.onrender.com/ws',label:'海外备用服务器'}
+];
 
 const rand=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -306,14 +310,25 @@ function hexRgb(h){const n=parseInt(h.slice(1),16);return[n>>16&255,n>>8&255,n&2
 function mix(h1,h2,t){const a=hexRgb(h1),b=hexRgb(h2);return'rgb('+a.map((v,i)=>Math.round(v+(b[i]-v)*t)).join(',')+')';}
 
 /* ================= 联机服务器地址 ================= */
-function serverWs(){
-  try{const q=new URLSearchParams(location.search).get('server');
-    if(q){if(/^wss?:\/\//i.test(q))return q;return'wss://'+q.replace(/^https?:\/\//i,'').replace(/\/+$/,'')+'/ws';}}catch(e){}
+function normWs(q){q=q.trim();if(/^wss?:\/\//i.test(q))return q;return'wss://'+q.replace(/^https?:\/\//i,'').replace(/\/+$/,'')+'/ws';}
+function serverCandidates(){
+  try{const sp=new URLSearchParams(location.search),one=sp.get('server'),many=sp.get('servers');
+    if(one)return[{url:normWs(one),label:'指定服务器'}];
+    if(many)return many.split(',').filter(Boolean).map((u,i)=>({url:normWs(u),label:i?'备用服务器':'指定服务器'}));}catch(e){}
+  // 页面就放在游戏服务器上（例如 game.xwj0.cn）时，直接连本站
   if(/^https?:$/.test(location.protocol)&&location.host&&!/\.github\.io$/i.test(location.hostname))
-    return(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws';
-  return DEFAULT_SERVER;
+    return[{url:(location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws',label:'本站服务器'}];
+  return SERVER_LIST;
 }
-const WS_URL=serverWs(),HTTP_BASE=WS_URL.replace(/^ws/i,'http').replace(/\/ws$/,'');
+const CANDIDATES=serverCandidates();
+const httpOf=u=>u.replace(/^ws/i,'http').replace(/\/ws$/,'');
+let WS_URL=CANDIDATES[0].url,HTTP_BASE=httpOf(WS_URL),SERVER_LABEL=CANDIDATES[0].label;
+function useServer(c){WS_URL=c.url;HTTP_BASE=httpOf(c.url);SERVER_LABEL=c.label;}
+async function probe(c,ms){
+  try{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),ms);
+    const r=await fetch(httpOf(c.url)+'/status',{cache:'no-store',signal:ctl.signal});clearTimeout(tm);
+    return r.ok?await r.json():null;}catch(e){return null;}
+}
 
 /* ================= 皮肤（程序绘制） ================= */
 const SK=320;
@@ -465,12 +480,16 @@ async function startOnline(){
   $('connectRetry').hidden=true;$('connectLocal').hidden=true;$('connectCancel').hidden=false;
   syncUI();
   const t0=performance.now();
-  const msg=()=>{const s=(performance.now()-t0)/1000;$('connectMsg').textContent=s<5?'正在连接服务器…':'免费服务器正在从休眠中唤醒，通常需要 30–60 秒。已等待 '+Math.floor(s)+' 秒';};
+  const msg=()=>{const s=(performance.now()-t0)/1000;$('connectMsg').textContent=s<5?'正在连接服务器…':(CANDIDATES.length>1?'国内服务器暂时连不上，正在唤醒海外备用服务器，通常需要 30–60 秒。':'服务器没有响应，正在重试。')+'已等待 '+Math.floor(s)+' 秒';};
   msg();clearInterval(connectTimer);connectTimer=setInterval(msg,1000);
   let ok=false;
   while(token===Net.token&&performance.now()-t0<150000){
-    try{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),15000);
-      const r=await fetch(HTTP_BASE+'/healthz',{cache:'no-store',signal:ctl.signal});clearTimeout(tm);if(r.ok){ok=true;break;}}catch(e){}
+    for(const c of CANDIDATES){
+      const d=await probe(c,c===CANDIDATES[0]?6000:15000);
+      if(token!==Net.token)return;
+      if(d){useServer(c);ok=true;break;}
+    }
+    if(ok)break;
     await sleep(2500);
   }
   if(token!==Net.token)return;
@@ -945,10 +964,12 @@ let netLineBusy=false;
 async function refreshNetLine(){
   if(netLineBusy)return;netLineBusy=true;const el=$('netLine');
   el.className='net-line';el.textContent='正在查看联机服务器…';
-  try{const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),12000);
-    const r=await fetch(HTTP_BASE+'/status',{cache:'no-store',signal:ctl.signal});clearTimeout(tm);
-    const d=await r.json();el.className='net-line up';el.textContent='服务器在线 · 当前真人 '+(d.humans|0)+' 人';
-  }catch(e){el.className='net-line wake';el.textContent='服务器在休眠，点开始后自动唤醒（约 30–60 秒）';}
+  for(const c of CANDIDATES){
+    const d=await probe(c,c===CANDIDATES[0]?6000:12000);
+    if(d){useServer(c);el.className='net-line up';el.textContent='服务器在线 · 当前真人 '+(d.humans|0)+' 人'+(CANDIDATES.length>1?' · '+c.label:'');netLineBusy=false;return;}
+  }
+  el.className='net-line wake';
+  el.textContent=CANDIDATES.length>1?'服务器暂时连不上，点开始后会自动重试并唤醒备用服务器':'服务器暂时连不上，点开始后会自动重试';
   netLineBusy=false;
 }
 $('modeOnline').addEventListener('click',()=>{selMode='online';markMode();refreshNetLine();});
@@ -989,7 +1010,7 @@ function loop(now){
 if(window.matchMedia&&matchMedia('(pointer: coarse)').matches){touchMode=true;document.body.classList.add('touch');}
 world=makeLocalWorld();
 resize();buildMenu();syncUI();refreshNetLine();
-window.__game={get state(){return state;},get mode(){return mode;},get human(){return human;},get world(){return world;},Net,doSplit,setEject,setBoost,myEnergy,myCells,nameColor,setTimeLeft(v){timeLeft=v;}};
+window.__game={get server(){return WS_URL;},get serverLabel(){return SERVER_LABEL;},get state(){return state;},get mode(){return mode;},get human(){return human;},get world(){return world;},Net,doSplit,setEject,setBoost,myEnergy,myCells,nameColor,setTimeLeft(v){timeLeft=v;}};
 requestAnimationFrame(loop);
 })();
 </script>

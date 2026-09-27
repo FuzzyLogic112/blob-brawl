@@ -16,7 +16,7 @@ const PUB = path.join(__dirname, '..', 'public');
 const MAX_HUMANS = Number(process.env.MAX_HUMANS) || 40;
 const TOTAL_TARGET = 22;     // 真人 + AI 的目标总数
 const MIN_BOTS = 6;          // 至少保留的 AI 数量
-const PER_IP = Number(process.env.PER_IP) || 6; // 单个 IP 最多连接数
+const PER_IP = Number(process.env.PER_IP) || 20; // 单个 IP 最多连接数（手机网络、宿舍常常多人共用一个公网 IP，不能设太小）
 const TICK_MS = 25;          // 物理 40Hz
 const SNAP_EVERY = 2;        // 快照 20Hz
 const LB_EVERY = 40;         // 排行榜 1Hz
@@ -249,4 +249,7 @@ setInterval(() => {
   if (tick % LB_EVERY === 0) sendLeaderboards();
 }, TICK_MS);
 
-server.listen(PORT, () => console.log('吞吞大乱斗服务器已启动，端口 ' + PORT));
+// HOST=127.0.0.1 时只接受本机连接（放在 Nginx 后面时使用）
+const HOST = process.env.HOST || '';
+const onListen = () => console.log('吞吞大乱斗服务器已启动，端口 ' + PORT + (HOST ? '，只监听 ' + HOST : ''));
+if (HOST) server.listen(PORT, HOST, onListen); else server.listen(PORT, onListen);

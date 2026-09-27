@@ -7,7 +7,27 @@
 
 两个地址都能进联机大厅；单机模式不需要服务器。
 
-## 一键部署联机服务器
+## 部署到自己的服务器（推荐国内玩家使用）
+
+适用于 Debian 11/12、Ubuntu 20.04 以上，1 核 1G 内存、3 Mbps 带宽起步。
+
+1. 域名解析：添加一条 **A 记录**，主机记录 `game`，记录值填服务器公网 IP
+2. 云服务器安全组：入方向放行 **80** 和 **443** 端口
+3. 用 root 登录服务器，执行：
+
+```bash
+curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install.sh | bash -s -- game.xwj0.cn
+```
+
+脚本会安装 Node.js、Nginx，注册开机自启的 `tuntun-brawl` 服务，并自动申请 HTTPS 证书。完成后打开 `https://game.xwj0.cn` 就能玩。以后想更新到最新版，重新执行同一条命令即可。
+
+GitHub Pages 上的页面会先连 `game.xwj0.cn`，连不上时自动改连 Render 备用服务器。
+
+常用命令：`systemctl status tuntun-brawl`（状态）、`journalctl -u tuntun-brawl -f`（日志）。
+
+发布新版本安装包：`bash deploy/build.sh`，把 `dist/` 里的两个文件放到 gh-pages 分支根目录。
+
+## 一键部署到 Render（海外免费）
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/FuzzyLogic112/blob-brawl)
 
@@ -49,6 +69,7 @@ public/index.html   前端：渲染、输入、菜单、单机模式、联机客
 public/sim.js       游戏逻辑：物理、吞噬、分身、刺球、AI（浏览器和服务器共用）
 server/server.js    联机服务器：Node.js + ws，服务器权威模拟
 render.yaml         Render 部署配置
+deploy/             自有服务器的一键安装脚本和打包脚本
 test/               规则测试和服务器测试（npm test）
 ```
 
