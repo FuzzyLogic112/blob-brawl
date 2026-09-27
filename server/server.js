@@ -9,13 +9,14 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const S = require('../public/sim.js');
+const VERSION = require('../package.json').version;
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUB = path.join(__dirname, '..', 'public');
 const MAX_HUMANS = Number(process.env.MAX_HUMANS) || 40;
 const TOTAL_TARGET = 22;     // 真人 + AI 的目标总数
 const MIN_BOTS = 6;          // 至少保留的 AI 数量
-const PER_IP = 6;            // 单个 IP 最多连接数
+const PER_IP = Number(process.env.PER_IP) || 6; // 单个 IP 最多连接数
 const TICK_MS = 25;          // 物理 40Hz
 const SNAP_EVERY = 2;        // 快照 20Hz
 const LB_EVERY = 40;         // 排行榜 1Hz
@@ -133,7 +134,7 @@ const server = http.createServer((req, res) => {
   if (pathname === '/healthz') { res.writeHead(200, { ...cors, 'content-type': 'text/plain' }); return res.end('ok'); }
   if (pathname === '/status') {
     res.writeHead(200, { ...cors, 'content-type': 'application/json' });
-    return res.end(JSON.stringify({ humans: humansCount(), max: MAX_HUMANS, players: world.players.length }));
+    return res.end(JSON.stringify({ humans: humansCount(), max: MAX_HUMANS, players: world.players.length, v: VERSION }));
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');

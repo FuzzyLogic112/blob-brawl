@@ -114,6 +114,8 @@ kbd{font-family:inherit;font-size:11px;font-weight:800;background:#eef2ec;border
 .howto{font-size:12.5px;color:var(--ink-2);line-height:1.8;border-top:1px dashed var(--line);padding-top:12px;margin:0}
 .howto .row{display:flex;flex-wrap:wrap;gap:4px 12px}
 .howto .tip{margin-top:4px}
+.c-eat{color:#0f9a5c}
+.c-danger{color:#e0474d}
 body.touch .only-desk{display:none}
 body:not(.touch) .only-touch{display:none}
 
@@ -223,7 +225,7 @@ body.touch #keys{display:none}
     <div class="howto">
       <div class="row only-desk"><span><kbd>鼠标</kbd> 控制方向</span><span><kbd>空格</kbd> 分身冲刺</span><span><kbd>W</kbd> 吐出质量</span><span><kbd>Esc</kbd> 暂停</span></div>
       <div class="row only-touch"><span>左手按住屏幕拖动控制方向</span><span>右下角按钮分身、吐球</span></div>
-      <div class="tip">质量比对方大 25% 才能吃掉它。绿色刺球能藏身，但大球撞上会炸成碎块；往刺球里吐 7 次球能把它射出去。</div>
+      <div class="tip">质量比对方大 15% 才能吃掉它：对手名字是<b class="c-eat">绿色</b>的能吃，<b class="c-danger">红色</b>的能吃掉你。绿色刺球能藏身，但大球撞上会炸成碎块；往刺球里吐 7 次球能把它射出去。</div>
     </div>
   </div>
 </section>
@@ -494,7 +496,7 @@ function onNetMsg(m){
       const f=m.f;for(let i=0;i<f.length;i+=5)Net.foods.set(f[i],{x:f[i+1]/10,y:f[i+2]/10,ci:f[i+3],r:f[i+4]===1?5.5:7.5});
       Net.foodsArr=[...Net.foods.values()];Net.me=netPlayer(m.id);Net.active=true;Net.alive=true;Net.snapCam=true;
       clearInterval(connectTimer);state='playing';syncUI();startInputLoop();refreshHud();
-      feed('已进入联机大厅，开吃！','');break;
+      feed('已进入联机大厅，开吃！','');feed('名字绿色的能吃，红色的快躲','');break;
     }
     case 'pl':for(const r of m.a)updPlayer(r);for(const id of m.d)if(id!==Net.myId)Net.players.delete(id);break;
     case 'lb':Net.lb=m;break;
@@ -543,7 +545,7 @@ function onSnap(buf){
     if(Net.lastMass&&m>Net.lastMass+.5)Sound.eat();Net.lastMass=m;}
 }
 function smoothNet(dt){
-  const k=1-Math.exp(-dt*16),kr=1-Math.exp(-dt*10);
+  const k=1-Math.exp(-dt*20),kr=1-Math.exp(-dt*12);
   for(const c of Net.cellsArr){const dx=c.tx-c.x,dy=c.ty-c.y;if(dx*dx+dy*dy>250000){c.x=c.tx;c.y=c.ty;}else{c.x+=dx*k;c.y+=dy*k;}c.rd+=(c.r-c.rd)*kr;}
   for(const e of Net.ejectsArr){e.x+=(e.tx-e.x)*k;e.y+=(e.ty-e.y)*k;}
   for(const v of Net.virusesArr){v.x+=(v.tx-v.x)*k;v.y+=(v.ty-v.y)*k;v.rd+=(v.r-v.rd)*kr;v.rot+=dt*.15;}
@@ -640,6 +642,15 @@ function updateCam(dt){
   const k=Math.min(1,dt*(state==='menu'||state==='connecting'?1.2:7));cam.x+=(tx-cam.x)*k;cam.y+=(ty-cam.y)*k;cam.z+=(tz-cam.z)*Math.min(1,dt*2.2);
 }
 const foodBuckets=FOOD_COLORS.map(()=>[]);const drawList=[];
+let relBig=0,relSmall=0;   // 我方最大、最小的球的质量，用来判断能不能吃
+const EDIBLE_COLOR='#9dffc6',DANGER_COLOR='#ffb2b6';
+const RING={'#9dffc6':'rgba(22,193,114,.85)','#ffb2b6':'rgba(255,59,71,.85)'};
+function nameColor(m){
+  if(!relBig)return'#fff';
+  if(relBig>=m*C.EAT_RATIO)return EDIBLE_COLOR;     // 我最大的球能吃掉它
+  if(m>=relSmall*C.EAT_RATIO)return DANGER_COLOR;   // 它能吃掉我至少一个球
+  return'#fff';
+}
 function drawCell(c,z){
   const sk=skinOf(c.owner.skin),r=c.rd,sr=r*z;
   ctx.beginPath();
@@ -649,10 +660,14 @@ function drawCell(c,z){
   }else ctx.arc(c.x,c.y,r,0,TAU);
   ctx.save();ctx.clip();ctx.drawImage(sk.canvas,c.x-r*1.04,c.y-r*1.04,r*2.08,r*2.08);ctx.restore();
   ctx.lineWidth=clamp(r*.065,1.5,14);ctx.strokeStyle=sk.border;ctx.stroke();
+  const rel=c.owner===me?'#fff':nameColor(c.mass);
+  if(rel!=='#fff'&&sr>6){ // 能吃 / 危险 的外圈提示
+    const lw=Math.max(2.5/z,r*.045);ctx.beginPath();ctx.arc(c.x,c.y,r*1.02+lw*1.2,0,TAU);ctx.lineWidth=lw;ctx.strokeStyle=RING[rel];ctx.stroke();
+  }
   if(sr>10){
-    const mine=c.owner===me,showMass=mine&&sr>24,sc=r*.0036;
+    const mine=c.owner===me,showMass=sr>24,sc=r*.0036;
     ctx.save();ctx.translate(c.x,c.y);ctx.scale(sc,sc);
-    ctx.lineWidth=14;ctx.strokeStyle='rgba(20,28,30,.7)';ctx.fillStyle='#fff';
+    ctx.lineWidth=15;ctx.strokeStyle=rel==='#fff'?'rgba(20,28,30,.72)':'rgba(15,20,22,.9)';ctx.fillStyle=rel;
     const y=showMass?-18:0;ctx.strokeText(c.owner.name,0,y);ctx.fillText(c.owner.name,0,y);
     if(showMass){ctx.scale(.58,.58);const t=String(Math.floor(c.mass));ctx.strokeText(t,0,118);ctx.fillText(t,0,118);}
     ctx.restore();
@@ -685,6 +700,7 @@ function render(){
   for(const c of V.cells){if(c.dead||!c.owner)continue;const r=c.rd;if(c.x+r<x0||c.x-r>x1||c.y+r<y0||c.y-r>y1)continue;drawList.push(c);}
   for(const v of V.viruses){const r=v.rd;if(v.x+r<x0||v.x-r>x1||v.y+r<y0||v.y-r>y1)continue;drawList.push(v);}
   drawList.sort((a,b)=>a.rd-b.rd);
+  relBig=0;relSmall=0;if(meAlive())for(const c of myCells){if(c.mass>relBig)relBig=c.mass;if(!relSmall||c.mass<relSmall)relSmall=c.mass;}
   ctx.font='900 100px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
   for(const o of drawList){if(o.virus)drawVirus(o);else drawCell(o,z);}
   for(const p of parts){ctx.globalAlpha=Math.max(0,p.life/.5);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.r*(.4+.6*p.life/.5),0,TAU);ctx.fill();}
@@ -752,7 +768,7 @@ function startLocal(m){
   const c=human.cells[0];cam.x=c.x;cam.y=c.y;
   input.joy.active=false;input.eject=false;placeJoy(null);
   pickView();syncUI();refreshHud();
-  feed(m==='timed'?'限时对战开始，3 分钟后按质量排名':'开吃！先找豆子长大一点','');
+  feed(m==='timed'?'限时对战开始，3 分钟后按质量排名':'开吃！先找豆子长大一点','');feed('名字绿色的能吃，红色的快躲','');
 }
 function respawnLocal(resetStats){
   if(resetStats){human.kills=0;human.maxMass=C.START_MASS;human.bestRank=99;}
@@ -924,7 +940,7 @@ function loop(now){
 if(window.matchMedia&&matchMedia('(pointer: coarse)').matches){touchMode=true;document.body.classList.add('touch');}
 world=makeLocalWorld();
 resize();buildMenu();syncUI();refreshNetLine();
-window.__game={get state(){return state;},get mode(){return mode;},get human(){return human;},get world(){return world;},Net,doSplit,setEject,myCells};
+window.__game={get state(){return state;},get mode(){return mode;},get human(){return human;},get world(){return world;},Net,doSplit,setEject,myCells,nameColor,setTimeLeft(v){timeLeft=v;}};
 requestAnimationFrame(loop);
 })();
 </script>
