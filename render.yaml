@@ -1,0 +1,14 @@
+# Render 一键部署配置（免费套餐，新加坡机房，离国内最近）
+services:
+  - type: web
+    name: tuntun-brawl
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

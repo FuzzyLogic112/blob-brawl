@@ -1,0 +1,17 @@
+{
+  "name": "tuntun-brawl",
+  "version": "2.0.0",
+  "private": true,
+  "description": "吞吞大乱斗：原创吞噬成长类网页游戏，支持真人联机对战",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}
