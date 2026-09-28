@@ -9,19 +9,25 @@
 
 ## 用 Docker 部署（推荐，可以和别的项目共用一台服务器）
 
-一台服务器同时运行吞吞大乱斗和[筑账](https://github.com/FuzzyLogic112/zhuzhang)网页版：Caddy 网关统一处理 HTTPS，每个项目一个容器。适用于 Debian 11/12、Ubuntu 20.04 以上，2 核 2G 足够。
+Caddy 网关统一处理 HTTPS，每个项目一个容器。可以只运行吞吞大乱斗，以后再加上[筑账](https://github.com/FuzzyLogic112/zhuzhang)网页版或自己的网站。适用于 Debian 11/12、Ubuntu 20.04 以上，2 核 2G 足够。
 
-1. 域名解析：添加两条 **A 记录**，主机记录分别是 `game` 和 `zhuzhang`，记录值都填服务器公网 IP
+1. 域名解析：添加一条 **A 记录**，主机记录 `game`，记录值填服务器公网 IP
 2. 云服务器安全组：入方向放行 TCP **80**、**443**（可选再放行 UDP 443，启用 HTTP/3）
 3. 用 root 登录服务器，执行：
 
 ```bash
-curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install-docker.sh | bash -s -- --game game.xwj0.cn --zhuzhang zhuzhang.xwj0.cn
+curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install-docker.sh | bash -s -- --game game.xwj0.cn
 ```
 
-脚本会从阿里云镜像站安装 Docker、配置多个 Docker Hub 镜像加速，下载两个项目的最新代码并构建镜像，然后启动。证书由 Caddy 自动申请和续期。以前用下面的 `install.sh` 装过的话，会自动停用旧的服务。
+脚本会从阿里云镜像站安装 Docker、配置多个 Docker Hub 镜像加速，下载最新代码并构建镜像，然后启动。证书由 Caddy 自动申请和续期。以前用下面的 `install.sh` 装过的话，会自动停用旧的服务。
 
-- 更新两个项目到最新版：重新执行 `curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install-docker.sh | bash`（域名沿用上次的设置）
+以后要加上筑账：先添加主机记录 `zhuzhang` 的 A 记录，再执行（游戏的设置会沿用，游戏不会中断）：
+
+```bash
+curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install-docker.sh | bash -s -- --zhuzhang zhuzhang.xwj0.cn
+```
+
+- 更新到最新版：重新执行 `curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install-docker.sh | bash`（域名沿用上次的设置；代码没变的项目不会重启）
 - 查看状态和日志：`cd /opt/sites && docker compose ps`、`docker compose logs -f`
 - 加自己的网站：在 `/opt/sites/sites/` 下新建 `名字.caddy` 写域名转发，再执行 `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`
 - 配置文件在 `deploy/docker/`。游戏镜像也可以单独构建：`docker build -t tuntun-brawl .`

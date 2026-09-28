@@ -25,7 +25,6 @@ services:
       - caddy_config:/config
     depends_on:
       - tuntun
-      - zhuzhang
     mem_limit: 256m
     logging: *logging
 
@@ -42,8 +41,10 @@ services:
     mem_limit: 300m
     logging: *logging
 
-  # 筑账网页版：从源码构建出静态网页，用 Caddy 提供文件
+  # 筑账网页版（可选）：从源码构建出静态网页，用 Caddy 提供文件
+  # 只有 .env 里 COMPOSE_PROFILES 包含 zhuzhang 时才会构建和启动
   zhuzhang:
+    profiles: ["zhuzhang"]
     build:
       context: ./src/zhuzhang
       dockerfile: Dockerfile.sites
