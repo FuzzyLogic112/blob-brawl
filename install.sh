@@ -18,7 +18,7 @@ set -euo pipefail
 DOMAIN="${1:-}"
 EMAIL="${2:-}"
 BASE_URL="${TUNTUN_BASE_URL:-https://fuzzylogic112.github.io/blob-brawl}"
-PKG_SHA256="0379429cdfd811a40559e31561ea4e916f4a8f390598f301e813becc37496c59"
+PKG_SHA256="1ad577afe82909efa210fea9bcd76bb1b0d9567fe54d9510487d190f997ad63f"
 APP_DIR=/opt/tuntun-brawl
 APP_USER=tuntun
 PORT=8080
