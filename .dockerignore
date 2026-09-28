@@ -1,0 +1,10 @@
+.git
+.github
+.gitignore
+dist
+test
+deploy
+render.yaml
+*.md
+!README.md
+npm-debug.log*

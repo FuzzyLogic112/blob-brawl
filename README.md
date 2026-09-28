@@ -7,7 +7,26 @@
 
 两个地址都能进联机大厅；单机模式不需要服务器。
 
-## 部署到自己的服务器（推荐国内玩家使用）
+## 用 Docker 部署（推荐，可以和别的项目共用一台服务器）
+
+一台服务器同时运行吞吞大乱斗和[筑账](https://github.com/FuzzyLogic112/zhuzhang)网页版：Caddy 网关统一处理 HTTPS，每个项目一个容器。适用于 Debian 11/12、Ubuntu 20.04 以上，2 核 2G 足够。
+
+1. 域名解析：添加两条 **A 记录**，主机记录分别是 `game` 和 `zhuzhang`，记录值都填服务器公网 IP
+2. 云服务器安全组：入方向放行 TCP **80**、**443**（可选再放行 UDP 443，启用 HTTP/3）
+3. 用 root 登录服务器，执行：
+
+```bash
+curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install-docker.sh | bash -s -- --game game.xwj0.cn --zhuzhang zhuzhang.xwj0.cn
+```
+
+脚本会从阿里云镜像站安装 Docker、配置多个 Docker Hub 镜像加速，下载两个项目的最新代码并构建镜像，然后启动。证书由 Caddy 自动申请和续期。以前用下面的 `install.sh` 装过的话，会自动停用旧的服务。
+
+- 更新两个项目到最新版：重新执行 `curl -fsSL https://fuzzylogic112.github.io/blob-brawl/install-docker.sh | bash`（域名沿用上次的设置）
+- 查看状态和日志：`cd /opt/sites && docker compose ps`、`docker compose logs -f`
+- 加自己的网站：在 `/opt/sites/sites/` 下新建 `名字.caddy` 写域名转发，再执行 `docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile`
+- 配置文件在 `deploy/docker/`。游戏镜像也可以单独构建：`docker build -t tuntun-brawl .`
+
+## 不用 Docker 部署到自己的服务器
 
 适用于 Debian 11/12、Ubuntu 20.04 以上，1 核 1G 内存、3 Mbps 带宽起步。
 
@@ -25,7 +44,7 @@ GitHub Pages 上的页面会先连 `game.xwj0.cn`，连不上时自动改连 Ren
 
 常用命令：`systemctl status tuntun-brawl`（状态）、`journalctl -u tuntun-brawl -f`（日志）。
 
-发布新版本安装包：`bash deploy/build.sh`，把 `dist/` 里的两个文件放到 gh-pages 分支根目录。
+发布新版本安装包：`bash deploy/build.sh`，把 `dist/` 里的三个文件放到 gh-pages 分支根目录。
 
 ## 一键部署到 Render（海外免费）
 
@@ -69,7 +88,8 @@ public/index.html   前端：渲染、输入、菜单、单机模式、联机客
 public/sim.js       游戏逻辑：物理、吞噬、分身、刺球、AI（浏览器和服务器共用）
 server/server.js    联机服务器：Node.js + ws，服务器权威模拟
 render.yaml         Render 部署配置
-deploy/             自有服务器的一键安装脚本和打包脚本
+Dockerfile          联机服务器镜像
+deploy/             自有服务器的一键安装脚本、Docker 多项目配置和打包脚本
 test/               规则测试和服务器测试（npm test）
 ```
 

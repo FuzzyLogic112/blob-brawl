@@ -1,0 +1,14 @@
+# 筑账容器内部的静态文件服务（只在内部网络 80 端口，HTTPS 由网关负责）
+:80 {
+	root * /srv
+	file_server
+
+	# 网页和离线缓存脚本每次都向服务器确认，保证更新后能及时生效
+	@fresh path / /index.html /sw.js *.webmanifest /downloads/ /guide/
+	header @fresh Cache-Control "no-cache"
+
+	@manifest path *.webmanifest
+	header @manifest Content-Type "application/manifest+json"
+
+	header X-Content-Type-Options "nosniff"
+}

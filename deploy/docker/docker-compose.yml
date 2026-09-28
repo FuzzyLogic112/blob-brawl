@@ -1,0 +1,61 @@
+# 服务器上的全部网站：一个 Caddy 网关统一处理 HTTPS，每个项目一个容器。
+# 由 install-docker.sh 复制到 /opt/sites，重新执行安装脚本会覆盖本文件。
+# 想加自己的项目：在 services 里加一个服务，再到 sites/ 目录放一个 .caddy 文件写域名转发。
+name: sites
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # 网关：80/443 端口，按域名转发到各个项目，自动申请和续期 HTTPS 证书
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - tuntun
+      - zhuzhang
+    mem_limit: 256m
+    logging: *logging
+
+  # 吞吞大乱斗联机服务器（只在内部网络开放 8080）
+  tuntun:
+    build:
+      context: ./src/tuntun-brawl
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    image: sites/tuntun-brawl:latest
+    restart: unless-stopped
+    environment:
+      PER_IP: "20"
+    mem_limit: 300m
+    logging: *logging
+
+  # 筑账网页版：从源码构建出静态网页，用 Caddy 提供文件
+  zhuzhang:
+    build:
+      context: ./src/zhuzhang
+      dockerfile: Dockerfile.sites
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    image: sites/zhuzhang:latest
+    restart: unless-stopped
+    volumes:
+      - ./build/zhuzhang.Caddyfile:/etc/caddy/Caddyfile:ro
+    mem_limit: 64m
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:
